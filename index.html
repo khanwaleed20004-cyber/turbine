@@ -25,6 +25,14 @@
   #soundBtn { margin-top:10px; padding:12px 24px; font-size:18px; border:none;
               border-radius:10px; background:#2980b9; color:#fff; cursor:pointer; }
   #soundBtn.on { background:#1b8a3a; }
+
+  .ctrl { margin:20px auto; padding:15px; max-width:500px; background:rgba(0,0,0,0.65);
+          border-radius:12px; }
+  .ctrl button { margin:6px; padding:16px 28px; font-size:20px; font-weight:bold; border:none;
+                 border-radius:12px; color:#fff; cursor:pointer; }
+  #btnStop { background:#c0392b; }
+  #btnOn   { background:#1b8a3a; }
+  .ctrl button:disabled { opacity:0.5; cursor:wait; }
 </style>
 </head>
 <body>
@@ -33,12 +41,23 @@
   <div class="box">Voltage<br><span id="v">--</span> V</div>
   <div class="box">RPM<br><span id="r">--</span></div>
   <p><small id="t">--</small></p>
+
+  <div class="ctrl">
+    <div>Turbine Control</div>
+    <button id="btnStop">⏹ Turbine Stop</button>
+    <button id="btnOn">▶ Turbine On</button>
+    <div><small id="cmdMsg">No command sent yet</small></div>
+  </div>
+
   <button id="soundBtn">🔇 Tap to enable sound</button>
 
 <script>
 // ===== Your channel details =====
 const CHANNEL_ID = "3568547";
 const READ_KEY   = "6MGEE2L6J8ESTBS9";
+// ===== TalkBack (button control) =====
+const TB_ID  = "58278";
+const TB_KEY = "XIJ00SEU9TLKEFOE";
 // ===== Thresholds =====
 const FINE_VOLT = 1.3;
 const THOR_RPM  = 10;
@@ -67,13 +86,37 @@ Object.values(SND).forEach(a => { a.preload = "auto"; });
 // Load all GIFs once so they switch instantly
 Object.values(BG).forEach(src => { const i = new Image(); i.src = src; });
 
+// ===== Turbine Stop / Turbine On buttons =====
+// Turbine Stop -> sends "ON"  (servo turns 60 degrees = brake)
+// Turbine On   -> sends "OFF" (servo returns home = brake released)
+async function sendCommand(cmd, label) {
+  const msg = document.getElementById("cmdMsg");
+  const bStop = document.getElementById("btnStop");
+  const bOn   = document.getElementById("btnOn");
+  bStop.disabled = bOn.disabled = true;
+  msg.textContent = "Sending...";
+  try {
+    await fetch(`https://api.thingspeak.com/talkbacks/${TB_ID}/commands`, {
+      method: "POST",
+      mode: "no-cors",
+      body: new URLSearchParams({ api_key: TB_KEY, command_string: cmd })
+    });
+    msg.textContent = label + " sent at " + new Date().toLocaleTimeString() +
+                      " (ESP32 gets it within 5 s)";
+  } catch (err) {
+    msg.textContent = "Could not send command";
+  }
+  setTimeout(() => { bStop.disabled = bOn.disabled = false; }, 3000);
+}
+document.getElementById("btnStop").addEventListener("click", () => sendCommand("ON", "Turbine STOP"));
+document.getElementById("btnOn").addEventListener("click",   () => sendCommand("OFF", "Turbine ON"));
+
 // Browsers block sound until the visitor taps the page once
 let soundOn = false;
 const btn = document.getElementById("soundBtn");
 btn.addEventListener("click", () => {
   soundOn = !soundOn;
   if (soundOn) {
-    // unlock every audio file with a silent play
     Object.values(SND).forEach(a => {
       a.muted = true;
       a.play().then(() => { a.pause(); a.currentTime = 0; a.muted = false; })
@@ -103,7 +146,7 @@ function setState(state, cssClass, text) {
     currentState = state;
     document.body.style.backgroundImage =
       `linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)), url('${BG[state]}')`;
-    playSound(state);   // plays only when the state changes
+    playSound(state);
   }
 }
 
