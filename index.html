@@ -170,7 +170,7 @@ async function update() {
     if (brake === null) {
       brkEl.textContent = "--";
     } else {
-      brkEl.textContent = brake === 1 ? "Brake applied" : "Brake released";
+      brkEl.textContent = brake === 1 ? "Applied" : "Released";
     }
     if (expectedBrake !== null && brake === expectedBrake) {
       document.getElementById("cmdMsg").textContent =
