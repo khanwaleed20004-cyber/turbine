@@ -22,6 +22,9 @@
           border-radius:12px; font-size:22px; }
   h1, small { text-shadow: 0 2px 6px #000; }
   small { color:#ddd; }
+  #soundBtn { margin-top:10px; padding:12px 24px; font-size:18px; border:none;
+              border-radius:10px; background:#2980b9; color:#fff; cursor:pointer; }
+  #soundBtn.on { background:#1b8a3a; }
 </style>
 </head>
 <body>
@@ -30,6 +33,7 @@
   <div class="box">Voltage<br><span id="v">--</span> V</div>
   <div class="box">RPM<br><span id="r">--</span></div>
   <p><small id="t">--</small></p>
+  <button id="soundBtn">🔇 Tap to enable sound</button>
 
 <script>
 // ===== Your channel details =====
@@ -50,8 +54,45 @@ const BG = {
   low:  "low.gif"
 };
 
+// ===== Sound for each state =====
+const SND = {
+  fine: new Audio("fine.mp3"),
+  thor: new Audio("thor.mp3"),
+  stop: new Audio("stop.mp3"),
+  off:  new Audio("off.mp3"),
+  low:  new Audio("low.mp3")
+};
+Object.values(SND).forEach(a => { a.preload = "auto"; });
+
 // Load all GIFs once so they switch instantly
 Object.values(BG).forEach(src => { const i = new Image(); i.src = src; });
+
+// Browsers block sound until the visitor taps the page once
+let soundOn = false;
+const btn = document.getElementById("soundBtn");
+btn.addEventListener("click", () => {
+  soundOn = !soundOn;
+  if (soundOn) {
+    // unlock every audio file with a silent play
+    Object.values(SND).forEach(a => {
+      a.muted = true;
+      a.play().then(() => { a.pause(); a.currentTime = 0; a.muted = false; })
+              .catch(() => { a.muted = false; });
+    });
+    btn.textContent = "🔊 Sound on (tap to mute)";
+    btn.classList.add("on");
+  } else {
+    Object.values(SND).forEach(a => { a.pause(); a.currentTime = 0; });
+    btn.textContent = "🔇 Tap to enable sound";
+    btn.classList.remove("on");
+  }
+});
+
+function playSound(state) {
+  if (!soundOn) return;
+  Object.values(SND).forEach(a => { a.pause(); a.currentTime = 0; });
+  if (SND[state]) SND[state].play().catch(() => {});
+}
 
 let currentState = "";
 function setState(state, cssClass, text) {
@@ -62,6 +103,7 @@ function setState(state, cssClass, text) {
     currentState = state;
     document.body.style.backgroundImage =
       `linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)), url('${BG[state]}')`;
+    playSound(state);   // plays only when the state changes
   }
 }
 
