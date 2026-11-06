@@ -40,6 +40,7 @@
   <div id="status" class="off">Loading...</div>
   <div class="box">Voltage<br><span id="v">--</span> V</div>
   <div class="box">RPM<br><span id="r">--</span></div>
+  <div class="box">Brake<br><span id="brk">--</span></div>
   <p><small id="t">--</small></p>
 
   <div class="ctrl">
@@ -89,7 +90,10 @@ Object.values(BG).forEach(src => { const i = new Image(); i.src = src; });
 // ===== Turbine Stop / Turbine On buttons =====
 // Turbine Stop -> sends "ON"  (servo turns 60 degrees = brake)
 // Turbine On   -> sends "OFF" (servo returns home = brake released)
+let expectedBrake = null;   // 1 = waiting for "applied", 0 = waiting for "released"
+
 async function sendCommand(cmd, label) {
+  expectedBrake = (cmd === "ON") ? 1 : 0;
   const msg = document.getElementById("cmdMsg");
   const bStop = document.getElementById("btnStop");
   const bOn   = document.getElementById("btnOn");
@@ -101,10 +105,10 @@ async function sendCommand(cmd, label) {
       mode: "no-cors",
       body: new URLSearchParams({ api_key: TB_KEY, command_string: cmd })
     });
-    msg.textContent = label + " sent at " + new Date().toLocaleTimeString() +
-                      " (ESP32 gets it within 5 s)";
+    msg.textContent = label + " sent. Waiting for ESP32 confirmation...";
   } catch (err) {
     msg.textContent = "Could not send command";
+    expectedBrake = null;
   }
   setTimeout(() => { bStop.disabled = bOn.disabled = false; }, 3000);
 }
@@ -159,6 +163,21 @@ async function update() {
     const volt = parseFloat(d.field1) || 0;
     const rpm  = parseFloat(d.field2) || 0;
     const age  = (Date.now() - new Date(d.created_at)) / 1000;
+
+    // ----- Brake confirmation from the ESP32 (field 3) -----
+    const brake = (d.field3 === null || d.field3 === undefined) ? null : parseFloat(d.field3);
+    const brkEl = document.getElementById("brk");
+    if (brake === null) {
+      brkEl.textContent = "--";
+    } else {
+      brkEl.textContent = brake === 1 ? "Brake applied" : "Brake released";
+    }
+    if (expectedBrake !== null && brake === expectedBrake) {
+      document.getElementById("cmdMsg").textContent =
+        (brake === 1 ? "✅ Brake applied (confirmed by ESP32)"
+                     : "✅ Brake released (confirmed by ESP32)");
+      expectedBrake = null;
+    }
 
     document.getElementById("v").textContent = volt.toFixed(2);
     document.getElementById("r").textContent = rpm.toFixed(0);
