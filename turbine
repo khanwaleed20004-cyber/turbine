@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wind Turbine Monitor</title>
+<style>
+  body { font-family: Arial, sans-serif; background:#111; color:#fff; text-align:center; margin:0; padding:20px; }
+  #status { font-size:28px; font-weight:bold; padding:30px 10px; border-radius:16px; margin:20px auto; max-width:500px; }
+  .fine { background:#1b8a3a; } .thor { background:#6a1bb8; }
+  .stop { background:#c0392b; } .off  { background:#555; }
+  .box { display:inline-block; margin:10px; padding:15px 25px; background:#222; border-radius:12px; font-size:22px; }
+  small { color:#aaa; }
+</style>
+</head>
+<body>
+  <h1>Wind Turbine Monitor</h1>
+  <div id="status" class="off">Loading...</div>
+  <div class="box">Voltage<br><span id="v">--</span> V</div>
+  <div class="box">RPM<br><span id="r">--</span></div>
+  <p><small id="t">--</small></p>
+
+<script>
+// ===== Fill these in =====
+const CHANNEL_ID = "3568547";
+const READ_KEY   = "AUQOBBQVFOBNYGAR";   // leave "" if the channel is public
+// ===== Thresholds =====
+const FINE_VOLT = 1.3;   // above this = generating
+const THOR_RPM  = 50;    // ideal RPM
+const THOR_VOLT = 5;     // ideal voltage
+const STALE_SEC = 60;    // no data for this long = offline
+
+async function update() {
+  const el = document.getElementById("status");
+  try {
+    let url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds/last.json`;
+    if (READ_KEY) url += `?api_key=${READ_KEY}`;
+    const d = await (await fetch(url)).json();
+
+    const volt = parseFloat(d.field1) || 0;
+    const rpm  = parseFloat(d.field2) || 0;
+    const age  = (Date.now() - new Date(d.created_at)) / 1000;
+
+    document.getElementById("v").textContent = volt.toFixed(2);
+    document.getElementById("r").textContent = rpm.toFixed(0);
+    document.getElementById("t").textContent = "Last update: " + new Date(d.created_at).toLocaleString();
+
+    if (age > STALE_SEC) {
+      el.className = "off";  el.textContent = "ESP32 offline (no new data)";
+    } else if (rpm === 0) {
+      el.className = "stop"; el.textContent = "Something has happened, turbine stopped!";
+    } else if (rpm >= THOR_RPM && volt >= THOR_VOLT) {
+      el.className = "thor"; el.textContent = "I am Thor ⚡";
+    } else if (volt > FINE_VOLT) {
+      el.className = "fine"; el.textContent = "Turbine is fine";
+    } else {
+      el.className = "fine"; el.textContent = "Rotating, low voltage";
+    }
+  } catch (e) {
+    el.className = "off"; el.textContent = "Cannot read ThingSpeak";
+  }
+}
+update();
+setInterval(update, 15000);   // refresh every 15 seconds
+</script>
+</body>
+</html>
