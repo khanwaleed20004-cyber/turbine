@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Wind Turbine Monitor</title>
 <style>
   body {
@@ -47,10 +50,11 @@
     <div>Turbine Control</div>
     <button id="btnStop">⏹ Turbine Stop</button>
     <button id="btnOn">▶ Turbine On</button>
-    <div><small id="cmdMsg">No command sent yet</small></div>
+    <div><small id="cmdMsg">Ready - no command sent yet</small></div>
   </div>
 
   <button id="soundBtn">🔇 Tap to enable sound</button>
+  <p><small>page version v3</small></p>
 
 <script>
 // ===== Your channel details =====
@@ -84,13 +88,12 @@ const SND = {
 };
 Object.values(SND).forEach(a => { a.preload = "auto"; });
 
-// Load all GIFs once so they switch instantly
 Object.values(BG).forEach(src => { const i = new Image(); i.src = src; });
 
 // ===== Turbine Stop / Turbine On buttons =====
 // Turbine Stop -> sends "ON"  (servo turns 60 degrees = brake)
 // Turbine On   -> sends "OFF" (servo returns home = brake released)
-let expectedBrake = null;   // 1 = waiting for "applied", 0 = waiting for "released"
+let expectedBrake = null;
 
 async function sendCommand(cmd, label) {
   expectedBrake = (cmd === "ON") ? 1 : 0;
@@ -156,15 +159,15 @@ function setState(state, cssClass, text) {
 
 async function update() {
   try {
-    let url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds/last.json`;
-    if (READ_KEY) url += `?api_key=${READ_KEY}`;
+    let url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds/last.json?t=${Date.now()}`;
+    if (READ_KEY) url += `&api_key=${READ_KEY}`;
     const d = await (await fetch(url)).json();
 
     const volt = parseFloat(d.field1) || 0;
     const rpm  = parseFloat(d.field2) || 0;
     const age  = (Date.now() - new Date(d.created_at)) / 1000;
 
-    // ----- Brake confirmation from the ESP32 (field 3) -----
+    // ----- Brake state from the ESP32 (field 3) -----
     const brake = (d.field3 === null || d.field3 === undefined) ? null : parseFloat(d.field3);
     const brkEl = document.getElementById("brk");
     if (brake === null) {
