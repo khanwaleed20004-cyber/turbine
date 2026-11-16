@@ -54,7 +54,7 @@
   </div>
 
   <button id="soundBtn">🔇 Tap to enable sound</button>
-  <p><small>page version v3</small></p>
+  <p><small>page version v4</small></p>
 
 <script>
 // ===== Your channel details =====
@@ -64,9 +64,9 @@ const READ_KEY   = "6MGEE2L6J8ESTBS9";
 const TB_ID  = "58278";
 const TB_KEY = "XIJ00SEU9TLKEFOE";
 // ===== Thresholds =====
-const FINE_VOLT = 1.3;
+const FINE_VOLT = 1.0;    // above this = "Turbine is fine"
 const THOR_RPM  = 10;
-const THOR_VOLT = 5;
+const THOR_VOLT = 25;     // above this (with RPM) = Thor
 const STALE_SEC = 60;
 
 // ===== Background GIF for each state =====
@@ -91,7 +91,7 @@ Object.values(SND).forEach(a => { a.preload = "auto"; });
 Object.values(BG).forEach(src => { const i = new Image(); i.src = src; });
 
 // ===== Turbine Stop / Turbine On buttons =====
-// Turbine Stop -> sends "ON"  (servo turns 60 degrees = brake)
+// Turbine Stop -> sends "ON"  (servo turns 40 degrees = brake)
 // Turbine On   -> sends "OFF" (servo returns home = brake released)
 let expectedBrake = null;
 
@@ -190,7 +190,7 @@ async function update() {
       setState("off", "off", "ESP32 offline (no new data)");
     } else if (rpm === 0) {
       setState("stop", "stop", "Something has happened, turbine stopped!");
-    } else if (rpm >= THOR_RPM && volt >= THOR_VOLT) {
+    } else if (rpm >= THOR_RPM && volt > THOR_VOLT) {
       setState("thor", "thor", "I am Thor ⚡");
     } else if (volt > FINE_VOLT) {
       setState("fine", "fine", "Turbine is fine");
