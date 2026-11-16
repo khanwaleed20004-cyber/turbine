@@ -54,7 +54,7 @@
   </div>
 
   <button id="soundBtn">🔇 Tap to enable sound</button>
-  <p><small>page version v4</small></p>
+  <p><small>page version v5</small></p>
 
 <script>
 // ===== Your channel details =====
@@ -86,7 +86,18 @@ const SND = {
   off:  new Audio("off.mp3"),
   low:  new Audio("low.mp3")
 };
-Object.values(SND).forEach(a => { a.preload = "auto"; });
+
+// ===== Sounds for the brake buttons and ESP32 confirmation =====
+// (if your files are .wav, change the extension here)
+const EVT = {
+  engaging:    new Audio("brake_engaging.mp3"),      // Turbine Stop pressed
+  disengaging: new Audio("brake_disengaging.mp3"),   // Turbine On pressed
+  engagedOk:   new Audio("engaging_confirmed.mp3"),  // ESP32 confirmed brake applied
+  disengagedOk:new Audio("disengaging_confirmed.mp3")// ESP32 confirmed brake released
+};
+
+const ALL_AUDIO = [...Object.values(SND), ...Object.values(EVT)];
+ALL_AUDIO.forEach(a => { a.preload = "auto"; });
 
 Object.values(BG).forEach(src => { const i = new Image(); i.src = src; });
 
@@ -102,6 +113,10 @@ async function sendCommand(cmd, label) {
   const bOn   = document.getElementById("btnOn");
   bStop.disabled = bOn.disabled = true;
   msg.textContent = "Sending...";
+
+  // play "brake engaging" or "brake disengaging" as soon as the button is pressed
+  playEvent(cmd === "ON" ? "engaging" : "disengaging");
+
   try {
     await fetch(`https://api.thingspeak.com/talkbacks/${TB_ID}/commands`, {
       method: "POST",
@@ -124,7 +139,7 @@ const btn = document.getElementById("soundBtn");
 btn.addEventListener("click", () => {
   soundOn = !soundOn;
   if (soundOn) {
-    Object.values(SND).forEach(a => {
+    ALL_AUDIO.forEach(a => {
       a.muted = true;
       a.play().then(() => { a.pause(); a.currentTime = 0; a.muted = false; })
               .catch(() => { a.muted = false; });
@@ -132,16 +147,26 @@ btn.addEventListener("click", () => {
     btn.textContent = "🔊 Sound on (tap to mute)";
     btn.classList.add("on");
   } else {
-    Object.values(SND).forEach(a => { a.pause(); a.currentTime = 0; });
+    stopAllSounds();
     btn.textContent = "🔇 Tap to enable sound";
     btn.classList.remove("on");
   }
 });
 
+function stopAllSounds() {
+  ALL_AUDIO.forEach(a => { a.pause(); a.currentTime = 0; });
+}
+
 function playSound(state) {
   if (!soundOn) return;
-  Object.values(SND).forEach(a => { a.pause(); a.currentTime = 0; });
+  stopAllSounds();
   if (SND[state]) SND[state].play().catch(() => {});
+}
+
+function playEvent(name) {
+  if (!soundOn) return;
+  stopAllSounds();
+  if (EVT[name]) EVT[name].play().catch(() => {});
 }
 
 let currentState = "";
@@ -179,6 +204,8 @@ async function update() {
       document.getElementById("cmdMsg").textContent =
         (brake === 1 ? "✅ Brake applied (confirmed by ESP32)"
                      : "✅ Brake released (confirmed by ESP32)");
+      // play "engaging confirmed" or "disengaging confirmed"
+      playEvent(brake === 1 ? "engagedOk" : "disengagedOk");
       expectedBrake = null;
     }
 
