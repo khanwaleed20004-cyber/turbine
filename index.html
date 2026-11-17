@@ -54,7 +54,7 @@
   </div>
 
   <button id="soundBtn">🔇 Tap to enable sound</button>
-  <p><small>page version v5</small></p>
+  <p><small>page version v6</small></p>
 
 <script>
 // ===== Your channel details =====
@@ -105,12 +105,25 @@ Object.values(BG).forEach(src => { const i = new Image(); i.src = src; });
 // Turbine Stop -> sends "ON"  (servo turns 40 degrees = brake)
 // Turbine On   -> sends "OFF" (servo returns home = brake released)
 let expectedBrake = null;
+let esp32Online = false;   // updated by update()
+let cmdSentAt = 0;         // time the last command was sent
+let cmdTimer = null;
 
 async function sendCommand(cmd, label) {
-  expectedBrake = (cmd === "ON") ? 1 : 0;
-  const msg = document.getElementById("cmdMsg");
+  const msg   = document.getElementById("cmdMsg");
   const bStop = document.getElementById("btnStop");
   const bOn   = document.getElementById("btnOn");
+
+  // Block the command if the ESP32 is offline
+  if (!esp32Online) {
+    expectedBrake = null;
+    msg.textContent = "⚠️ Turbine offline - cannot send the command";
+    if (soundOn) { stopAllSounds(); SND.off.play().catch(() => {}); }
+    return;
+  }
+
+  expectedBrake = (cmd === "ON") ? 1 : 0;
+  cmdSentAt = Date.now();
   bStop.disabled = bOn.disabled = true;
   msg.textContent = "Sending...";
 
@@ -124,6 +137,15 @@ async function sendCommand(cmd, label) {
       body: new URLSearchParams({ api_key: TB_KEY, command_string: cmd })
     });
     msg.textContent = label + " sent. Waiting for ESP32 confirmation...";
+
+    // If no confirmation within 40 seconds, report it
+    clearTimeout(cmdTimer);
+    cmdTimer = setTimeout(() => {
+      if (expectedBrake !== null) {
+        msg.textContent = "⚠️ No confirmation from ESP32 - turbine may be offline";
+        expectedBrake = null;
+      }
+    }, 40000);
   } catch (err) {
     msg.textContent = "Could not send command";
     expectedBrake = null;
@@ -191,6 +213,7 @@ async function update() {
     const volt = parseFloat(d.field1) || 0;
     const rpm  = parseFloat(d.field2) || 0;
     const age  = (Date.now() - new Date(d.created_at)) / 1000;
+    esp32Online = age <= STALE_SEC;
 
     // ----- Brake state from the ESP32 (field 3) -----
     const brake = (d.field3 === null || d.field3 === undefined) ? null : parseFloat(d.field3);
@@ -200,7 +223,12 @@ async function update() {
     } else {
       brkEl.textContent = brake === 1 ? "Applied" : "Released";
     }
-    if (expectedBrake !== null && brake === expectedBrake) {
+
+    // Confirm only with a FRESH reading uploaded after the command was sent
+    const entryTime = new Date(d.created_at).getTime();
+    if (expectedBrake !== null && age <= STALE_SEC &&
+        entryTime > cmdSentAt && brake === expectedBrake) {
+      clearTimeout(cmdTimer);
       document.getElementById("cmdMsg").textContent =
         (brake === 1 ? "✅ Brake applied (confirmed by ESP32)"
                      : "✅ Brake released (confirmed by ESP32)");
@@ -225,7 +253,9 @@ async function update() {
       setState("low", "fine", "Rotating, low voltage");
     }
   } catch (e) {
-    setState("off", "off", "Cannot read ThingSpeak");
+    esp32Online = false;
+    console.error("update() failed:", e);
+    setState("off", "off", "ESP32 offline (no new data)");
   }
 }
 update();
